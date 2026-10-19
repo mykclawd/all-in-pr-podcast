@@ -1,0 +1,28 @@
+{
+  "_comment": "Stock ElevenLabs premade voices cast by role. Recast with render.py --list-voices. Do not use cloned or look-alike voices of real people.",
+  "elevenlabs": {
+    "model_id": "eleven_v3",
+    "output_format": "mp3_44100_128",
+    "voices": {
+      "JASON": "SA7eD52NRr8WAehitVt1",
+      "FRIEDBERG": "cBTYF7NiJbR8Bvmdeuse",
+      "CHAMATH": "cdnpdcqt2HW1XtKv2f3V",
+      "SACKS": "v3p1kjzUvro6S76qmYmH"
+    },
+    "_voice_names": {
+      "JASON": "Tyler Cruz - Cool Energetic DJ",
+      "FRIEDBERG": "Mike - Animation, Explainers & Gaming",
+      "CHAMATH": "Clamon - Warm, Crisp, Lively & Friendly",
+      "SACKS": "Mark - Solid, Clear and Dependable"
+    }
+  },
+  "say": {
+    "rate": 200,
+    "voices": {
+      "JASON": "Eddy (English (US))",
+      "FRIEDBERG": "Reed (English (US))",
+      "CHAMATH": "Rocko (English (US))",
+      "SACKS": "Ralph"
+    }
+  }
+}
