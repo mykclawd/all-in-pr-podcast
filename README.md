@@ -63,8 +63,14 @@ uv run scripts/render.py --list-voices                   # browse voices to reca
 
 ## Configure
 
-- `voices.json`: ElevenLabs voice IDs per host, the model (`eleven_v3`), and
-  the macOS `say` fallback voices.
+- `voices.json`:
+  - `elevenlabs`: voice IDs per host and the model (`eleven_v3`).
+  - `say`: macOS fallback voices.
+  - `pronunciations`: respellings sent to TTS only (Friedberg is said
+    "Freedberg").
+  - `speed`: per-host pace, pitch kept (Friedberg runs at 1.2x). With
+    ElevenLabs, the renderer uses the timestamps endpoint to speed up only
+    that host's segments of the dialogue.
 - `references/personas.md`: each host's role and speech patterns.
 - `references/example-episode.md`: a sample script showing the target shape.
 

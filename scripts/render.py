@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -55,6 +56,17 @@ def parse(path: Path) -> list[tuple[str, str]]:
 
 def spoken(text: str) -> str:
     return TAG_RE.sub("", text).strip()
+
+
+def apply_pronunciations(text: str, pron: dict) -> str:
+    """Respell names for TTS only (e.g. Friedberg -> Freedberg)."""
+    for word, say in pron.items():
+        text = re.sub(rf"\b{re.escape(word)}\b", say, text)
+    return text
+
+
+def host_speed(cfg: dict, host: str) -> float:
+    return float(cfg.get("speed", {}).get(host, 1.0))
 
 
 def stats(turns: list[tuple[str, str]]) -> dict:
@@ -136,20 +148,51 @@ def chunk(turns: list[tuple[str, str]], limit: int) -> list[list[tuple[str, str]
     return chunks
 
 
+def retime_segments(src: Path, dst: Path, segments: list[dict], speeds: list[float]) -> None:
+    """Speed up individual speakers inside one dialogue clip. ElevenLabs returns
+    back-to-back voice segments; each is cut out, tempo-adjusted (pitch kept),
+    and joined again in order, so nothing overlaps."""
+    chains, labels = [], []
+    for i, seg in enumerate(segments):
+        start = seg["start_time_seconds"]
+        end = segments[i + 1]["start_time_seconds"] if i + 1 < len(segments) else None
+        trim = f"atrim=start={start}" + (f":end={end}" if end is not None else "")
+        tempo = f",atempo={speeds[i]}" if abs(speeds[i] - 1.0) > 0.01 else ""
+        chains.append(f"[0:a]{trim},asetpts=PTS-STARTPTS{tempo}[s{i}]")
+        labels.append(f"[s{i}]")
+    graph = ";".join(chains) + f";{''.join(labels)}concat=n={len(labels)}:v=0:a=1[out]"
+    ffmpeg(["-i", str(src), "-filter_complex", graph, "-map", "[out]",
+            "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(dst)])
+
+
 def render_elevenlabs(turns, cfg, key, workdir: Path, chunk_chars: int) -> list[Path]:
     el = cfg["elevenlabs"]
     voices = el["voices"]
+    pron = cfg.get("pronunciations", {})
+    retime = any(abs(host_speed(cfg, h) - 1.0) > 0.01 for h, _ in turns)
     parts = []
     groups = chunk(turns, chunk_chars)
     for i, group in enumerate(groups):
         print(f"  elevenlabs chunk {i + 1}/{len(groups)} ({sum(len(t) for _, t in group)} chars)", file=sys.stderr)
         body = {
             "model_id": el.get("model_id", "eleven_v3"),
-            "inputs": [{"voice_id": voices[h], "text": t} for h, t in group],
+            "inputs": [{"voice_id": voices[h], "text": apply_pronunciations(t, pron)} for h, t in group],
         }
-        audio = http("POST", f"{API}/v1/text-to-dialogue?output_format={el.get('output_format', 'mp3_44100_128')}", key, body)
+        fmt = el.get("output_format", "mp3_44100_128")
+        raw = workdir / f"part{i:03d}.raw.mp3"
         p = workdir / f"part{i:03d}.mp3"
-        p.write_bytes(audio)
+        if not retime:
+            raw.write_bytes(http("POST", f"{API}/v1/text-to-dialogue?output_format={fmt}", key, body))
+            raw.rename(p)
+        else:
+            data = json.loads(http("POST", f"{API}/v1/text-to-dialogue/with-timestamps?output_format={fmt}", key, body))
+            raw.write_bytes(base64.b64decode(data["audio_base64"]))
+            segs = sorted(data.get("voice_segments") or [], key=lambda x: x["start_time_seconds"])
+            if not segs:
+                raw.rename(p)
+            else:
+                speeds = [host_speed(cfg, group[sg["dialogue_input_index"]][0]) for sg in segs]
+                retime_segments(raw, p, segs, speeds)
         parts.append(p)
     return parts
 
@@ -176,9 +219,12 @@ def render_say(turns, cfg, workdir: Path) -> list[Path]:
         if voice.split(" (")[0] in installed:
             args += ["-v", voice]
         aiff = workdir / f"turn{i:03d}.aiff"
-        subprocess.run(args + ["-o", str(aiff), spoken(text).replace("—", ", ")], check=True)
+        line = apply_pronunciations(spoken(text), cfg.get("pronunciations", {})).replace("—", ", ")
+        subprocess.run(args + ["-o", str(aiff), line], check=True)
         mp3 = workdir / f"turn{i:03d}.mp3"
-        ffmpeg(["-i", str(aiff), "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(mp3)])
+        speed = host_speed(cfg, host)
+        tempo = ["-af", f"atempo={speed}"] if abs(speed - 1.0) > 0.01 else []
+        ffmpeg(["-i", str(aiff), *tempo, "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(mp3)])
         parts.append(mp3)
     return parts
 

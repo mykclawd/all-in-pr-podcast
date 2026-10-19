@@ -16,6 +16,10 @@ listen, the user must be able to answer:
 Skill directory (referred to as `$SKILL` below): the folder containing this file,
 normally `~/.claude/skills/all-in-pr-podcast`.
 
+Requirements: `gh` logged in to the PR's host, `jq`, `ffmpeg`, and `uv`. An
+ElevenLabs key for realistic audio (otherwise macOS `say`). If something is
+missing, say exactly what and how to install it before starting.
+
 ## Voice policy
 
 Use stock or library voices cast to each host's *role and energy*. Never clone,
@@ -93,9 +97,20 @@ Hard constraints:
      Sacks gets a last jab. Then the sign-off. The ELI5 and the trade-off
      beats already covered the takeaways; the close only needs to leave the
      one thing the listener should remember.
-- Make it sound spoken: contractions, short sentences, interruptions (end a
-  line with "—" and start the next with `[interrupting]`), crosstalk
-  reactions ("Right.", "Hold on."), one or two laughs. No bullet-point prose.
+- Make it sound like four friends talking, not four people taking turns:
+  - Banter: hosts tease each other ("Here comes the lecture", "Rain Man's
+    warming up"), react to each other's points, and laugh once or twice.
+  - Interruptions: at least 3. End the cut-off line with "—" mid-thought and
+    start the next with `[interrupting]`. Lines never overlap; the next line
+    just jumps in.
+  - Quick reactions: 2-4 short lines of their own ("Right.", "Come on.",
+    "Wow.", "Here we go."), 1-4 words each.
+  - Contractions and short sentences; no bullet-point prose. Keep Friedberg's
+    explanation in order even when others cut in; he picks it back up
+    ("As I was saying, step three...").
+- Spell host names normally. `voices.json` `pronunciations` fixes how TTS says
+  them (Friedberg is said "Freedberg"), and `speed` sets per-host pace
+  (Friedberg talks 20% faster).
 - Code read aloud: say identifiers as words ("use user profile hook"), never
   read raw syntax, paths longer than two segments, hashes, or line numbers.
   Numbers that matter (timeouts, limits, percentages) must be said exactly.
