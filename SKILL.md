@@ -101,16 +101,17 @@ Hard constraints:
   - Banter: hosts tease each other ("Here comes the lecture", "Rain Man's
     warming up"), react to each other's points, and laugh once or twice.
   - Interruptions: at least 3. End the cut-off line with "—" mid-thought and
-    start the next with `[interrupting]`. Lines never overlap; the next line
-    just jumps in.
+    start the next with `[interrupting]`. Lines never overlap. The renderer
+    leaves 0.35 s between speakers and 0.15 s before an interruption (`timing`
+    in `voices.json`); ElevenLabs paces lines inside one request itself.
   - Quick reactions: 2-4 short lines of their own ("Right.", "Come on.",
     "Wow.", "Here we go."), 1-4 words each.
   - Contractions and short sentences; no bullet-point prose. Keep Friedberg's
     explanation in order even when others cut in; he picks it back up
     ("As I was saying, step three...").
 - Spell host names normally. `voices.json` `pronunciations` fixes how TTS says
-  them (Friedberg is said "Freedberg"), and `speed` sets per-host pace
-  (Friedberg talks 20% faster).
+  them (Friedberg is said "Freedberg"). Every host talks at normal pace;
+  `speed` in `voices.json` is optional (for example `{"FRIEDBERG": 1.2}`).
 - Code read aloud: say identifiers as words ("use user profile hook"), never
   read raw syntax, paths longer than two segments, hashes, or line numbers.
   Numbers that matter (timeouts, limits, percentages) must be said exactly.

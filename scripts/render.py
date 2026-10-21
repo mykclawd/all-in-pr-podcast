@@ -65,6 +65,23 @@ def apply_pronunciations(text: str, pron: dict) -> str:
     return text
 
 
+def is_interruption(text: str) -> bool:
+    return bool(re.match(r"^\s*\[interrupting\]", text, re.I))
+
+
+def cut_off(text: str) -> bool:
+    return text.rstrip().endswith(("—", "--"))
+
+
+def pause_before(prev_text: str | None, text: str, timing: dict) -> float:
+    """Pause before a line: none at the start, shorter for an interruption."""
+    if prev_text is None:
+        return 0.0
+    if is_interruption(text) or cut_off(prev_text):
+        return timing.get("interrupt_gap_seconds", 0.15)
+    return timing.get("gap_seconds", 0.35)
+
+
 def host_speed(cfg: dict, host: str) -> float:
     return float(cfg.get("speed", {}).get(host, 1.0))
 
@@ -165,12 +182,13 @@ def retime_segments(src: Path, dst: Path, segments: list[dict], speeds: list[flo
             "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(dst)])
 
 
-def render_elevenlabs(turns, cfg, key, workdir: Path, chunk_chars: int) -> list[Path]:
+def render_elevenlabs(turns, cfg, key, workdir: Path, chunk_chars: int) -> tuple[list[Path], list[float]]:
     el = cfg["elevenlabs"]
     voices = el["voices"]
     pron = cfg.get("pronunciations", {})
     retime = any(abs(host_speed(cfg, h) - 1.0) > 0.01 for h, _ in turns)
-    parts = []
+    parts, gaps, prev = [], [], None
+    timing = cfg.get("timing", {})
     groups = chunk(turns, chunk_chars)
     for i, group in enumerate(groups):
         print(f"  elevenlabs chunk {i + 1}/{len(groups)} ({sum(len(t) for _, t in group)} chars)", file=sys.stderr)
@@ -193,8 +211,12 @@ def render_elevenlabs(turns, cfg, key, workdir: Path, chunk_chars: int) -> list[
             else:
                 speeds = [host_speed(cfg, group[sg["dialogue_input_index"]][0]) for sg in segs]
                 retime_segments(raw, p, segs, speeds)
+        # ElevenLabs paces lines inside one request itself; add the configured
+        # pause only where two requests are joined.
+        gaps.append(pause_before(prev, group[0][1], timing))
+        prev = group[-1][1]
         parts.append(p)
-    return parts
+    return parts, gaps
 
 
 def list_voices(key: str) -> None:
@@ -207,7 +229,7 @@ def list_voices(key: str) -> None:
 
 # ---------- macOS say ----------
 
-def render_say(turns, cfg, workdir: Path) -> list[Path]:
+def render_say(turns, cfg, workdir: Path) -> tuple[list[Path], list[float]]:
     if not shutil.which("say"):
         die("macOS `say` not available; set an ElevenLabs key instead")
     sc = cfg["say"]
@@ -223,10 +245,16 @@ def render_say(turns, cfg, workdir: Path) -> list[Path]:
         subprocess.run(args + ["-o", str(aiff), line], check=True)
         mp3 = workdir / f"turn{i:03d}.mp3"
         speed = host_speed(cfg, host)
-        tempo = ["-af", f"atempo={speed}"] if abs(speed - 1.0) > 0.01 else []
-        ffmpeg(["-i", str(aiff), *tempo, "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(mp3)])
+        af = ("silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
+              "silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
+              "adelay=50:all=1,apad=pad_dur=0.05")
+        if abs(speed - 1.0) > 0.01:
+            af += f",atempo={speed}"
+        ffmpeg(["-i", str(aiff), "-af", af, "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(mp3)])
         parts.append(mp3)
-    return parts
+    timing = cfg.get("timing", {})
+    gaps = [pause_before(turns[i - 1][1] if i else None, t, timing) for i, (_, t) in enumerate(turns)]
+    return parts, gaps
 
 
 # ---------- stitching ----------
@@ -237,14 +265,23 @@ def ffmpeg(args: list[str]) -> None:
         die(f"ffmpeg failed: {r.stderr.strip()}")
 
 
-def stitch(parts: list[Path], out: Path, workdir: Path) -> None:
+def stitch(parts: list[Path], out: Path, workdir: Path, gaps: list[float] | None = None) -> None:
+    """Join parts in order, inserting gaps[i] seconds of silence before part i.
+    Parts never overlap."""
     out.parent.mkdir(parents=True, exist_ok=True)
-    if len(parts) == 1:
-        shutil.copyfile(parts[0], out)
-        return
-    lst = workdir / "list.txt"
-    lst.write_text("".join(f"file '{p}'\n" for p in parts))
-    ffmpeg(["-f", "concat", "-safe", "0", "-i", str(lst), "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", str(out)])
+    gaps = gaps or [0.0] * len(parts)
+    args, chains, labels = [], [], []
+    for i, (p, g) in enumerate(zip(parts, gaps)):
+        args += ["-i", str(p)]
+        ms = int(round(g * 1000))
+        delay = f"adelay={ms}:all=1," if ms > 0 else ""
+        chains.append(f"[{i}:a]{delay}aresample=44100,aformat=channel_layouts=mono[p{i}]")
+        labels.append(f"[p{i}]")
+    graph = ";".join(chains) + f";{''.join(labels)}concat=n={len(parts)}:v=0:a=1[out]"
+    script = workdir / "concat.txt"
+    script.write_text(graph)
+    ffmpeg([*args, "-filter_complex_script", str(script), "-map", "[out]",
+            "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out)])
 
 
 def duration(path: Path) -> str:
@@ -305,8 +342,11 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as td:
         wd = Path(td)
-        parts = render_elevenlabs(turns, cfg, key, wd, a.chunk_chars) if engine == "elevenlabs" else render_say(turns, cfg, wd)
-        stitch(parts, out, wd)
+        if engine == "elevenlabs":
+            parts, gaps = render_elevenlabs(turns, cfg, key, wd, a.chunk_chars)
+        else:
+            parts, gaps = render_say(turns, cfg, wd)
+        stitch(parts, out, wd, gaps)
 
     used = s["chars"] if engine == "elevenlabs" else 0
     print(f"wrote {out} ({duration(out)}, engine={engine}, ~{used} credits)")

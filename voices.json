@@ -1,10 +1,12 @@
 {
-  "_comment": "Stock ElevenLabs library voices cast by role. Recast with render.py --list-voices. Do not use cloned or look-alike voices of real people. pronunciations: respellings applied to the text sent to TTS only. speed: per-host tempo (1.2 = 20% faster), pitch kept, applied after generation.",
+  "_comment": "Stock ElevenLabs library voices cast by role. Recast with render.py --list-voices. Do not use cloned or look-alike voices of real people. pronunciations: respellings applied to the text sent to TTS only. speed: optional per-host tempo, e.g. {\"FRIEDBERG\": 1.2} = 20% faster (pitch kept); empty = normal pace. timing: pause before each line for `say`, and between ElevenLabs chunks, in seconds; lines never overlap.",
   "pronunciations": {
     "Friedberg": "Freedberg"
   },
-  "speed": {
-    "FRIEDBERG": 1.2
+  "speed": {},
+  "timing": {
+    "gap_seconds": 0.35,
+    "interrupt_gap_seconds": 0.15
   },
   "elevenlabs": {
     "model_id": "eleven_v3",

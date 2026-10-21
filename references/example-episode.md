@@ -1,7 +1,7 @@
 # Example episode (shape and density reference)
 
 Fictional PR: "Add stale-while-revalidate caching to token price fetches"
-(~470 words, about 2:30 spoken with Friedberg at 1.2x). Copy the structure, banter, and density, not the content.
+(~470 words, about 3:00 spoken). Copy the structure, banter, and density, not the content.
 
 ```
 JASON: [excited] Besties, we've got a spicy one. PR forty-two eighteen adds stale-while-revalidate caching to token prices. Short version: the price screen stops hanging on a spinner. Friedberg, what's the pain?
