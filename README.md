@@ -1,5 +1,7 @@
 # all-in-pr-podcast
 
+![All-In PR Podcast billboard: "Your PR. On air."](assets/billboard.jpg)
+
 An agent skill that turns a GitHub pull request into a 2-3 minute,
 four-host audio episode in the style of the All-In podcast:
 
@@ -11,6 +13,14 @@ four-host audio episode in the style of the All-In podcast:
 
 After one listen you should know what the PR does, why it was made, how it
 works, and what it traded away.
+
+## Example episode
+
+[Listen to `example-episode.mp3`](assets/example-episode.mp3) (3:17), made
+from [mykclawd-tracker PR #3](https://github.com/mykcryptodev/mykclawd-tracker/pull/3),
+which replaces a third-party PnL figure with cost basis computed from on-chain
+swaps. GitHub doesn't play audio inline in a README; the link opens the file
+page, where you can play or download it.
 
 Fan parody, not affiliated with the All-In podcast. The skill uses stock
 ElevenLabs library voices and refuses to clone or imitate the real hosts'
